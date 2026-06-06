@@ -58,6 +58,11 @@
     .choose .role-reader { background: var(--accent-dark); }
     .choose .role-speaker { background: #475569; }
     .choose small { display: block; font-weight: 400; opacity: 0.85; margin-top: 0.25rem; font-size: 0.85rem; }
+    .choose .remember {
+      display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem;
+      color: var(--text); font-size: 1rem; cursor: pointer; padding: 0.5rem 0.25rem;
+    }
+    .choose .remember input { width: 1.4rem; height: 1.4rem; accent-color: var(--accent); flex: 0 0 auto; }
 
     /* --- Lukijanäkymä --- */
     .reader-info {
@@ -154,6 +159,7 @@
   <header id="appHeader" class="hidden">
     <h1 id="headerTitle">Elvi</h1>
     <span id="status" class="status">—</span>
+    <button id="roleBtn" class="link-btn hidden">Vaihda rooli</button>
     <button id="settingsBtn" class="link-btn hidden">Asetukset</button>
   </header>
 
@@ -169,6 +175,10 @@
       🎤 Olen puhuja
       <small>Liityt koodilla ja puhut — puheesi litteroidaan. (esim. puhelin)</small>
     </button>
+    <label class="remember">
+      <input type="checkbox" id="rememberRole">
+      Muista valintani tällä laitteella
+    </label>
   </main>
 
   <!-- ============ LUKIJANÄKYMÄ ============ -->
@@ -269,23 +279,45 @@
     }
 
     // ====================== REITITYS ======================
+    // Tälle laitteelle tallennettu roolivalinta ("muista valintani")
+    const ROLE_KEY = 'elvi_role';
+    function getSavedRole() {
+      const r = localStorage.getItem(ROLE_KEY);
+      return (r === 'reader' || r === 'speaker') ? r : null;
+    }
+
     const params = new URLSearchParams(location.search);
-    const role = params.get('role');
+    let role = params.get('role');
     const urlSession = (params.get('session') || '').toUpperCase();
+
+    // Jos URL:ssa ei roolia, käytä tälle laitteelle tallennettua valintaa
+    if (!role) role = getSavedRole();
+
+    // "Vaihda rooli": unohda tallennettu valinta ja palaa valintaruutuun
+    el('roleBtn').addEventListener('click', () => {
+      localStorage.removeItem(ROLE_KEY);
+      location.href = location.pathname;
+    });
 
     el('appHeader').classList.remove('hidden');
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija';
+      el('roleBtn').classList.remove('hidden');
       startReader();
     } else if (role === 'speaker') {
       el('headerTitle').textContent = 'Elvi · puhuja';
+      el('roleBtn').classList.remove('hidden');
       startSpeakerFlow(urlSession);
     } else {
       el('appHeader').classList.add('hidden');
       el('chooseView').classList.remove('hidden');
-      el('beReader').addEventListener('click', () => { location.search = '?role=reader'; });
-      el('beSpeaker').addEventListener('click', () => { location.search = '?role=speaker'; });
+      const choose = (r) => {
+        if (el('rememberRole').checked) localStorage.setItem(ROLE_KEY, r);
+        location.search = '?role=' + r;
+      };
+      el('beReader').addEventListener('click', () => choose('reader'));
+      el('beSpeaker').addEventListener('click', () => choose('speaker'));
     }
 
     // ====================== LUKIJA ======================
