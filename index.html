@@ -76,7 +76,6 @@
     }
     .reader-info-head .codeline { font-size: 0.95rem; color: var(--muted); }
     .reader-info-head .codeline b { color: var(--accent); letter-spacing: 0.12em; font-size: 1.2rem; }
-    .reader-info .qr { display: inline-block; margin: 0.75rem auto 0.25rem; background: #fff; padding: 8px; border-radius: 8px; }
     .reader-info .link { font-size: 0.78rem; color: var(--muted); word-break: break-all; margin-top: 0.5rem; }
     .reader-info .smallbtn {
       margin-top: 0.5rem; background: #334155; color: var(--text); border: none;
@@ -199,7 +198,6 @@
         <button class="toggle" id="toggleInfo">Piilota</button>
       </div>
       <div class="reader-info-body">
-        <div class="qr" id="qr"></div>
         <div class="link" id="joinLink"></div>
         <button class="smallbtn" id="copyLink">Kopioi liittymislinkki</button>
         <button class="smallbtn" id="editCode">Muokkaa koodia</button>
@@ -217,7 +215,7 @@
   <!-- ============ PUHUJA: KOODISYÖTTÖ ============ -->
   <main id="joinView" class="join hidden">
     <h2>Liity istuntoon</h2>
-    <p>Syötä lukijan laitteen näyttämä istunnon koodi (tai avaa QR-linkki).</p>
+    <p>Syötä lukijan laitteen näyttämä istunnon koodi.</p>
     <div class="row">
       <input id="codeInput" type="text" maxlength="6" autocomplete="off" placeholder="ABCD">
       <button id="joinBtn">Liity</button>
@@ -256,9 +254,8 @@
     <button id="clearBtn">Tyhjennä</button>
   </div>
 
-  <!-- Azure Speech SDK + QR (klassiset skriptit latautuvat ennen alla olevaa moduulia) -->
+  <!-- Azure Speech SDK (klassinen skripti latautuu ennen alla olevaa moduulia) -->
   <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
-  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
@@ -353,12 +350,6 @@
 
       const joinUrl = location.origin + location.pathname + '?role=speaker&session=' + code;
       el('joinLink').textContent = joinUrl;
-
-      // QR-koodi (luodaan paikallisesti, ei ulkoista palvelua)
-      try {
-        new QRCode(el('qr'), { text: joinUrl, width: 180, height: 180,
-          colorDark: '#0f172a', colorLight: '#ffffff' });
-      } catch (e) { el('qr').textContent = '(QR ei latautunut)'; }
 
       el('copyLink').addEventListener('click', async () => {
         try { await navigator.clipboard.writeText(joinUrl); el('copyLink').textContent = 'Kopioitu ✓'; }
