@@ -148,6 +148,21 @@
     .speaker-final { font-size: clamp(1.4rem, 4.5vw, 2.2rem); line-height: 1.35; }
     .speaker-final p { margin: 0 0 0.5rem 0; }
     .speaker-interim { font-size: clamp(1.4rem, 4.5vw, 2.2rem); line-height: 1.35; opacity: 0.5; font-style: italic; margin: 0; }
+    #speakerFinal p { cursor: pointer; }
+    #speakerFinal p.editing { cursor: default; }
+    .line-edit {
+      width: 100%; font-size: clamp(1.3rem, 4.2vw, 2rem); line-height: 1.35;
+      padding: 0.6rem; border-radius: 0.5rem; border: 1px solid #475569;
+      background: #0b1220; color: var(--text); font-family: inherit; resize: vertical;
+    }
+    .line-edit-btns { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+    .line-edit-btns button {
+      flex: 1; padding: 0.7rem 0.4rem; font-size: 1rem; font-weight: 600;
+      border: none; border-radius: 0.5rem; color: #fff; cursor: pointer;
+    }
+    .line-edit-btns .le-save { background: var(--ok); }
+    .line-edit-btns .le-cancel { background: #475569; }
+    .line-edit-btns .le-del { background: var(--danger); }
 
     .controls {
       display: flex; gap: 0.75rem; background: var(--panel); border-top: 1px solid #334155;
@@ -255,7 +270,7 @@
     <div id="speakerError"></div>
     <div id="speakerFinal" class="speaker-final"></div>
     <p id="speakerInterim" class="speaker-interim"></p>
-    <p id="speakerPlaceholder" class="placeholder">Paina "Aloita" ja ala puhua. Teksti välitetään lukijalle.</p>
+    <p id="speakerPlaceholder" class="placeholder">Paina "Aloita" ja ala puhua. Teksti välitetään lukijalle. Voit korjata virheen napauttamalla litteroitua lausetta.</p>
   </main>
   <div id="controls" class="controls hidden">
     <button id="startBtn">▶ Aloita</button>
@@ -268,7 +283,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-    import { getDatabase, ref, push, set, onValue, onChildAdded, onDisconnect, serverTimestamp }
+    import { getDatabase, ref, push, set, onValue, onChildAdded, onChildChanged, onChildRemoved, onDisconnect, serverTimestamp }
       from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 
     // ---- Firebase-konfiguraatio (julkinen; pääsyä rajataan DB-säännöillä) ----
@@ -407,21 +422,38 @@
       const interimEl = el('readerInterim');
       const phEl = el('readerPlaceholder');
 
+      // Avain → kappale-elementti, jotta puhujan korjaukset/poistot osuvat oikeaan lauseeseen
+      const lineEls = new Map();
+      const linesPath = 'sessions/' + code + '/lines';
+
       // Valmiit lauseet saapuvat lapsiniminä → lisätään järjestyksessä
-      onChildAdded(ref(db, 'sessions/' + code + '/lines'), (snap) => {
+      onChildAdded(ref(db, linesPath), (snap) => {
         const v = snap.val();
         const text = v && v.t ? v.t : '';
-        if (!text.trim()) return;
         phEl.classList.add('hidden');
         const p = document.createElement('p');
         p.textContent = text;
         finalEl.appendChild(p);
+        lineEls.set(snap.key, p);
         interimEl.textContent = '';
         el('readerView').scrollTop = el('readerView').scrollHeight;
       }, (err) => {
         setStatus('virhe', 'error');
         phEl.textContent = 'Tietokantavirhe: ' + err.message;
         phEl.classList.remove('hidden');
+      });
+
+      // Puhuja korjasi lausetta → päivitä sama kappale
+      onChildChanged(ref(db, linesPath), (snap) => {
+        const p = lineEls.get(snap.key);
+        if (p) { const v = snap.val(); p.textContent = (v && v.t) ? v.t : ''; }
+      });
+
+      // Puhuja poisti yksittäisen lauseen → poista kappale
+      onChildRemoved(ref(db, linesPath), (snap) => {
+        const p = lineEls.get(snap.key);
+        if (p) { p.remove(); lineEls.delete(snap.key); }
+        if (!lineEls.size) phEl.classList.remove('hidden');
       });
 
       // Himmeä väliteksti
@@ -433,9 +465,10 @@
       });
 
       // Tyhjennys: jos puhuja tyhjentää, lines katoaa → näytetään se
-      onValue(ref(db, 'sessions/' + code + '/lines'), (snap) => {
+      onValue(ref(db, linesPath), (snap) => {
         if (!snap.exists()) {
           finalEl.innerHTML = '';
+          lineEls.clear();
           interimEl.textContent = '';
           phEl.classList.remove('hidden');
         }
@@ -562,14 +595,57 @@
     }
 
     // ====================== PUHUJA: paikallinen näyttö ======================
-    function appendSpeakerFinal(text) {
+    function appendSpeakerFinal(text, key) {
       if (!text.trim()) return;
       el('speakerPlaceholder').classList.add('hidden');
       const p = document.createElement('p');
       p.textContent = text.trim();
+      if (key) p.dataset.key = key;   // sidos Firebaseen → mahdollistaa korjauksen/poiston
       el('speakerFinal').appendChild(p);
       el('speakerInterim').textContent = '';
       el('speakerView').scrollTop = el('speakerView').scrollHeight;
+    }
+
+    // Napauta lausetta → muokkaa sitä. Korjaus/poisto välittyy lukijalle.
+    function editLine(p) {
+      const key = p.dataset.key;
+      const original = p.textContent;
+      p.classList.add('editing');
+      p.textContent = '';
+
+      const ta = document.createElement('textarea');
+      ta.className = 'line-edit';
+      ta.value = original;
+      ta.rows = 2;
+
+      const btns = document.createElement('div');
+      btns.className = 'line-edit-btns';
+      const save = document.createElement('button');   save.className = 'le-save';   save.textContent = 'Tallenna';
+      const cancel = document.createElement('button'); cancel.className = 'le-cancel'; cancel.textContent = 'Peruuta';
+      const del = document.createElement('button');    del.className = 'le-del';     del.textContent = 'Poista';
+      btns.append(save, cancel, del);
+      p.append(ta, btns);
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+
+      const restore = (txt) => { p.classList.remove('editing'); p.textContent = txt; };
+      const lineRef = () => ref(db, 'sessions/' + sessionCode + '/lines/' + key);
+
+      cancel.addEventListener('click', (e) => { e.stopPropagation(); restore(original); });
+      save.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const t = ta.value.trim();
+        if (!t) { ta.focus(); return; }
+        restore(t);
+        if (sessionCode && key) set(lineRef(), { t, ts: serverTimestamp() }).catch(() => {});
+      });
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm('Poistetaanko tämä lause?')) return;
+        p.remove();
+        if (sessionCode && key) set(lineRef(), null).catch(() => {});
+        if (!el('speakerFinal').children.length) el('speakerPlaceholder').classList.remove('hidden');
+      });
     }
     function setSpeakerInterim(text) {
       if (text.trim()) el('speakerPlaceholder').classList.add('hidden');
@@ -615,9 +691,14 @@
         };
         recognizer.recognized = (sender, e) => {
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text) {
-            appendSpeakerFinal(e.result.text);
-            // Välitä lukijalle: uusi valmis lause + tyhjennä väliteksti
-            if (linesRef) push(linesRef, { t: e.result.text, ts: serverTimestamp() }).catch(() => {});
+            // Välitä lukijalle: luo avain ensin, jotta lause on jälkikäteen muokattavissa
+            let key = null;
+            if (linesRef) {
+              const r = push(linesRef);
+              key = r.key;
+              set(r, { t: e.result.text, ts: serverTimestamp() }).catch(() => {});
+            }
+            appendSpeakerFinal(e.result.text, key);
             if (interimRef) set(interimRef, '').catch(() => {});
           }
         };
@@ -671,6 +752,12 @@
     el('startBtn').addEventListener('click', startRecognition);
     el('stopBtn').addEventListener('click', stopRecognition);
     el('clearBtn').addEventListener('click', clearSpeaker);
+
+    // Napauta litteroitua lausetta korjataksesi sitä (delegointi → kattaa myös uudet lauseet)
+    el('speakerFinal').addEventListener('click', (e) => {
+      const p = e.target.closest('p');
+      if (p && p.dataset.key && !p.classList.contains('editing')) editLine(p);
+    });
   </script>
 
   <!-- Service workerin rekisteröinti (suhteellinen polku) -->
