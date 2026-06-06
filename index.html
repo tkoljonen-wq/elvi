@@ -169,6 +169,7 @@
     <h1 id="headerTitle">Elvi</h1>
     <span id="status" class="status">—</span>
     <button id="roleBtn" class="link-btn hidden">Vaihda rooli</button>
+    <button id="sessionBtn" class="link-btn hidden">Vaihda istunto</button>
     <button id="settingsBtn" class="link-btn hidden">Asetukset</button>
   </header>
 
@@ -306,6 +307,14 @@
     }
     function saveCode(c) { localStorage.setItem(CODE_KEY, c); }
 
+    // Puhujan liittymä istuntoon: säilyy muistissa kunnes vaihdetaan
+    const SESSION_KEY = 'elvi_speaker_session';
+    function getSavedSession() {
+      const c = (localStorage.getItem(SESSION_KEY) || '').toUpperCase();
+      return /^[A-Z0-9]{4,6}$/.test(c) ? c : null;
+    }
+    function saveSession(c) { localStorage.setItem(SESSION_KEY, c); }
+
     const params = new URLSearchParams(location.search);
     let role = params.get('role');
     const urlSession = (params.get('session') || '').toUpperCase();
@@ -435,23 +444,49 @@
     let sessionCode = null;
 
     function startSpeakerFlow(sessionFromUrl) {
-      if (sessionFromUrl && sessionFromUrl.length >= 4) {
-        sessionCode = sessionFromUrl;
+      // Koodisyötön käsittelijät (liitetään kerran)
+      const doJoin = () => {
+        const c = el('codeInput').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (c.length < 4) { alert('Anna kelvollinen koodi.'); return; }
+        sessionCode = c;
+        saveSession(c);
+        el('joinView').classList.add('hidden');
+        afterJoin();
+      };
+      el('joinBtn').addEventListener('click', doJoin);
+      el('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
+
+      // "Vaihda istunto": unohda tallennettu koodi ja kysy uusi
+      el('sessionBtn').classList.remove('hidden');
+      el('sessionBtn').addEventListener('click', () => {
+        if (listening) stopRecognition();
+        if (presRef) set(presRef, false).catch(() => {});
+        localStorage.removeItem(SESSION_KEY);
+        sessionCode = null;
+        showJoinView();
+      });
+
+      // Aloituskoodi: URL > tallennettu > kysy käyttäjältä
+      const initial = (sessionFromUrl && sessionFromUrl.length >= 4)
+        ? sessionFromUrl : getSavedSession();
+      if (initial) {
+        sessionCode = initial;
+        saveSession(initial);
         afterJoin();
       } else {
-        el('joinView').classList.remove('hidden');
-        setStatus('syötä koodi');
-        const doJoin = () => {
-          const c = el('codeInput').value.toUpperCase().trim();
-          if (c.length < 4) { alert('Anna kelvollinen koodi.'); return; }
-          sessionCode = c;
-          el('joinView').classList.add('hidden');
-          afterJoin();
-        };
-        el('joinBtn').addEventListener('click', doJoin);
-        el('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
-        el('codeInput').focus();
+        showJoinView();
       }
+    }
+
+    function showJoinView() {
+      el('joinView').classList.remove('hidden');
+      el('setupView').classList.add('hidden');
+      el('speakerView').classList.add('hidden');
+      el('controls').classList.add('hidden');
+      el('settingsBtn').classList.add('hidden');
+      setStatus('syötä koodi');
+      el('codeInput').value = getSavedSession() || '';
+      el('codeInput').focus();
     }
 
     function afterJoin() {
