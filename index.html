@@ -26,7 +26,9 @@
       font-family: system-ui, -apple-system, sans-serif;
       -webkit-text-size-adjust: 100%;
     }
-    body { display: flex; flex-direction: column; min-height: 100dvh; }
+    /* Tarkalleen näytön korkuinen: sisältö rullaa main-osan sisällä,
+       jotta alapalkin napit pysyvät aina näkyvissä (ei koko sivun rullausta). */
+    body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
 
     header {
       display: flex; align-items: center; justify-content: space-between;
@@ -42,11 +44,12 @@
     .status.error { background: rgba(239,68,68,0.15); color: var(--danger); }
     .link-btn { background: none; border: none; color: var(--accent); font-size: 0.8rem; cursor: pointer; padding: 0.25rem; }
 
-    main { flex: 1; overflow-y: auto; padding: 1.25rem; -webkit-overflow-scrolling: touch; }
+    main { flex: 1; min-height: 0; overflow-y: auto; padding: 1.25rem; -webkit-overflow-scrolling: touch; }
 
     /* --- Roolivalinta --- */
     .choose {
-      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      flex: 1; min-height: 0; overflow-y: auto;
+      display: flex; flex-direction: column; justify-content: center;
       padding: 1.5rem; gap: 1rem; max-width: 480px; margin: 0 auto; width: 100%;
     }
     .choose h2 { margin: 0 0 0.25rem 0; font-size: 1.4rem; }
@@ -105,7 +108,8 @@
 
     /* --- Puhujan: koodisyöttö --- */
     .join {
-      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      flex: 1; min-height: 0; overflow-y: auto;
+      display: flex; flex-direction: column; justify-content: center;
       padding: 1.5rem; gap: 1rem; max-width: 480px; margin: 0 auto; width: 100%;
     }
     .join h2 { margin: 0; font-size: 1.4rem; }
@@ -124,7 +128,8 @@
 
     /* --- Puhujan: Azure-asetukset --- */
     .setup {
-      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      flex: 1; min-height: 0; overflow-y: auto;
+      display: flex; flex-direction: column; justify-content: center;
       padding: 1.5rem; gap: 1rem; max-width: 480px; margin: 0 auto; width: 100%;
     }
     .setup h2 { margin: 0; font-size: 1.4rem; }
@@ -144,7 +149,10 @@
     .speaker-final p { margin: 0 0 0.5rem 0; }
     .speaker-interim { font-size: clamp(1.4rem, 4.5vw, 2.2rem); line-height: 1.35; opacity: 0.5; font-style: italic; margin: 0; }
 
-    .controls { display: flex; gap: 0.75rem; padding: 1rem; background: var(--panel); border-top: 1px solid #334155; }
+    .controls {
+      display: flex; gap: 0.75rem; background: var(--panel); border-top: 1px solid #334155;
+      padding: 1rem; padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
     .controls button {
       flex: 1; font-size: 1.1rem; font-weight: 600; padding: 1rem 0.5rem;
       border: none; border-radius: 0.75rem; cursor: pointer; color: #fff; transition: filter 0.15s;
