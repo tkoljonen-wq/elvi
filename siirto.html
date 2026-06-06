@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <title>Elvi — siirto-testi</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --text: #f1f5f9;
+      --muted: #64748b;
+      --accent: #38bdf8;
+      --accent-dark: #0284c7;
+      --danger: #ef4444;
+      --ok: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+    body { display: flex; flex-direction: column; min-height: 100dvh; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1rem; background: var(--panel);
+      border-bottom: 1px solid #334155;
+    }
+    header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
+    .status {
+      font-size: 0.8rem; padding: 0.25rem 0.6rem; border-radius: 999px;
+      background: #334155; color: var(--muted); white-space: nowrap;
+    }
+    .status.live { background: rgba(34,197,94,0.15); color: var(--ok); }
+    .status.error { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+    main { flex: 1; overflow-y: auto; padding: 1.25rem; -webkit-overflow-scrolling: touch; }
+
+    /* --- Roolivalinta --- */
+    .choose {
+      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      padding: 1.5rem; gap: 1rem; max-width: 480px; margin: 0 auto; width: 100%;
+    }
+    .choose h2 { margin: 0 0 0.25rem 0; font-size: 1.4rem; }
+    .choose p { margin: 0 0 0.75rem 0; color: var(--muted); font-size: 0.95rem; line-height: 1.5; }
+    .choose button {
+      padding: 1.25rem; font-size: 1.15rem; font-weight: 600; border: none;
+      border-radius: 0.75rem; color: #fff; cursor: pointer; text-align: left;
+    }
+    .choose .role-reader { background: var(--accent-dark); }
+    .choose .role-speaker { background: #475569; }
+    .choose small { display: block; font-weight: 400; opacity: 0.85; margin-top: 0.25rem; font-size: 0.85rem; }
+
+    /* --- Lukijanäkymä --- */
+    .reader-info {
+      background: var(--panel); border: 1px solid #334155; border-radius: 0.75rem;
+      padding: 1rem; margin-bottom: 1.25rem; text-align: center;
+    }
+    .reader-info .code {
+      font-size: 2.4rem; font-weight: 700; letter-spacing: 0.15em;
+      color: var(--accent); margin: 0.25rem 0;
+    }
+    .reader-info .link {
+      font-size: 0.8rem; color: var(--muted); word-break: break-all;
+      margin-top: 0.5rem;
+    }
+    .reader-info button {
+      margin-top: 0.75rem; background: #334155; color: var(--text); border: none;
+      border-radius: 0.5rem; padding: 0.5rem 0.9rem; font-size: 0.85rem; cursor: pointer;
+    }
+    #readerText {
+      font-size: clamp(1.8rem, 6vw, 3rem); line-height: 1.4;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .placeholder { color: var(--muted); font-style: italic; font-size: 1.1rem; }
+
+    /* --- Puhujanäkymä --- */
+    .speaker { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; flex: 1; }
+    .speaker label { font-size: 0.9rem; color: var(--muted); }
+    .speaker textarea {
+      flex: 1; min-height: 40vh; width: 100%; padding: 1rem;
+      font-size: 1.3rem; line-height: 1.4; border-radius: 0.6rem;
+      border: 1px solid #475569; background: #0b1220; color: var(--text);
+      resize: none;
+    }
+    .code-entry { display: flex; gap: 0.6rem; }
+    .code-entry input {
+      flex: 1; padding: 0.9rem; font-size: 1.3rem; letter-spacing: 0.15em;
+      text-align: center; border-radius: 0.6rem; border: 1px solid #475569;
+      background: #0b1220; color: var(--text); text-transform: uppercase;
+    }
+    .code-entry button {
+      padding: 0 1.25rem; font-size: 1rem; font-weight: 600; border: none;
+      border-radius: 0.6rem; background: var(--accent-dark); color: #fff; cursor: pointer;
+    }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Elvi · siirto-testi</h1>
+    <span id="status" class="status">—</span>
+  </header>
+
+  <!-- ============ ROOLIVALINTA ============ -->
+  <main id="chooseView" class="choose hidden">
+    <h2>Valitse rooli</h2>
+    <p>Tämä on vaiheen 2 siirto-testi: teksti kirjoitetaan käsin ja sen pitäisi ilmestyä toiselle laitteelle Firebasen kautta.</p>
+    <button class="role-reader" id="beReader">
+      📺 Olen lukija (tabletti)
+      <small>Luo istunnon ja näyttää saapuvan tekstin isolla.</small>
+    </button>
+    <button class="role-speaker" id="beSpeaker">
+      ✍️ Olen puhuja (puhelin)
+      <small>Liityt koodilla ja kirjoitat tekstiä.</small>
+    </button>
+  </main>
+
+  <!-- ============ LUKIJANÄKYMÄ ============ -->
+  <main id="readerView" class="hidden">
+    <div class="reader-info">
+      <div style="font-size:0.85rem;color:var(--muted)">Istunnon koodi</div>
+      <div class="code" id="sessionCode">····</div>
+      <div class="link" id="joinLink"></div>
+      <button id="copyLink">Kopioi liittymislinkki</button>
+    </div>
+    <div id="readerText"><span class="placeholder">Odottaa puhujan tekstiä…</span></div>
+  </main>
+
+  <!-- ============ PUHUJANÄKYMÄ ============ -->
+  <div id="speakerView" class="speaker hidden">
+    <div id="codeEntry">
+      <label for="codeInput">Syötä lukijan näyttämä istunnon koodi:</label>
+      <div class="code-entry">
+        <input id="codeInput" type="text" maxlength="6" autocomplete="off" placeholder="ABCD">
+        <button id="joinBtn">Liity</button>
+      </div>
+    </div>
+    <div id="writeArea" class="hidden" style="display:flex;flex-direction:column;gap:0.75rem;flex:1;">
+      <label>Kirjoita tähän — teksti näkyy lukijan laitteella heti:</label>
+      <textarea id="speakerText" placeholder="Kirjoita…"></textarea>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+    import { getDatabase, ref, set, onValue, onDisconnect, serverTimestamp }
+      from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+
+    // ---- Firebase-konfiguraatio (julkinen; pääsyä rajataan DB-säännöillä) ----
+    const firebaseConfig = {
+      apiKey: "AIzaSyCrha7kXK-EH2QOH9e-6DfZMw9xQ_xqXNQ",
+      authDomain: "elvi-30ae4.firebaseapp.com",
+      databaseURL: "https://elvi-30ae4-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "elvi-30ae4",
+      storageBucket: "elvi-30ae4.firebasestorage.app",
+      messagingSenderId: "758156779315",
+      appId: "1:758156779315:web:6c7aad392f87aa6489a846"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const el = (id) => document.getElementById(id);
+    const statusEl = el('status');
+    function setStatus(text, cls) {
+      statusEl.textContent = text;
+      statusEl.className = 'status' + (cls ? ' ' + cls : '');
+    }
+
+    // ---- Istuntokoodi: 4 merkkiä, helppolukuiset (ei 0/O/1/I) ----
+    function makeCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let c = '';
+      for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
+      return c;
+    }
+
+    // ====================== ROOLIN VALINTA / REITITYS ======================
+    const params = new URLSearchParams(location.search);
+    const role = params.get('role');
+    const urlSession = (params.get('session') || '').toUpperCase();
+
+    if (role === 'reader') {
+      startReader();
+    } else if (role === 'speaker') {
+      startSpeaker(urlSession);
+    } else {
+      el('chooseView').classList.remove('hidden');
+      el('beReader').addEventListener('click', () => { location.search = '?role=reader'; });
+      el('beSpeaker').addEventListener('click', () => { location.search = '?role=speaker'; });
+    }
+
+    // ====================== LUKIJA ======================
+    function startReader() {
+      el('readerView').classList.remove('hidden');
+      const code = makeCode();
+      el('sessionCode').textContent = code;
+
+      const joinUrl = location.origin + location.pathname + '?role=speaker&session=' + code;
+      el('joinLink').textContent = joinUrl;
+      el('copyLink').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(joinUrl); el('copyLink').textContent = 'Kopioitu ✓'; }
+        catch (e) { el('copyLink').textContent = 'Kopiointi ei onnistunut'; }
+      });
+
+      setStatus('● odottaa', 'live');
+
+      // Kuuntele tekstisolmua
+      const textRef = ref(db, 'sessions/' + code + '/text');
+      const out = el('readerText');
+      onValue(textRef, (snap) => {
+        const val = snap.val();
+        if (val && val.trim()) {
+          out.textContent = val;
+        } else {
+          out.innerHTML = '<span class="placeholder">Odottaa puhujan tekstiä…</span>';
+        }
+        out.scrollTop = out.scrollHeight;
+      }, (err) => {
+        setStatus('virhe', 'error');
+        out.innerHTML = '<span class="placeholder">Tietokantavirhe: ' + err.message + '</span>';
+      });
+
+      // Seuraa puhujan läsnäoloa
+      const presRef = ref(db, 'sessions/' + code + '/speakerOnline');
+      onValue(presRef, (snap) => {
+        setStatus(snap.val() ? '● puhuja yhteydessä' : '● odottaa puhujaa', 'live');
+      });
+    }
+
+    // ====================== PUHUJA ======================
+    function startSpeaker(sessionFromUrl) {
+      el('speakerView').classList.remove('hidden');
+
+      const connect = (code) => {
+        code = code.toUpperCase().trim();
+        if (code.length < 4) { alert('Anna kelvollinen koodi.'); return; }
+        el('codeEntry').classList.add('hidden');
+        el('writeArea').classList.remove('hidden');
+        setStatus('● yhdistetty', 'live');
+
+        const textRef = ref(db, 'sessions/' + code + '/text');
+        const presRef = ref(db, 'sessions/' + code + '/speakerOnline');
+
+        // Läsnäolomerkintä + automaattinen poisto kun yhteys katkeaa
+        set(presRef, true).catch(() => {});
+        onDisconnect(presRef).set(false);
+
+        const ta = el('speakerText');
+        ta.focus();
+        let timer = null;
+        ta.addEventListener('input', () => {
+          // Pieni viive vähentää kirjoituksia (debounce)
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            set(textRef, ta.value).catch((err) => {
+              setStatus('kirjoitusvirhe', 'error');
+              console.error(err);
+            });
+          }, 120);
+        });
+      };
+
+      el('joinBtn').addEventListener('click', () => connect(el('codeInput').value));
+      el('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(el('codeInput').value); });
+
+      if (sessionFromUrl) {
+        el('codeInput').value = sessionFromUrl;
+        connect(sessionFromUrl);
+      } else {
+        setStatus('syötä koodi');
+        el('codeInput').focus();
+      }
+    }
+  </script>
+</body>
+</html>
