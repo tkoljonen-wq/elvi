@@ -315,6 +315,11 @@
     }
     function saveSession(c) { localStorage.setItem(SESSION_KEY, c); }
 
+    // Puhujan tila — määriteltävä ennen reititystä, koska reititys kutsuu
+    // startSpeakerFlow()/connectFirebase() heti ja ne käyttävät näitä (TDZ).
+    let sessionCode = null;
+    let linesRef = null, interimRef = null, presRef = null;
+
     const params = new URLSearchParams(location.search);
     let role = params.get('role');
     const urlSession = (params.get('session') || '').toUpperCase();
@@ -441,8 +446,6 @@
     }
 
     // ====================== PUHUJA: vaiheet ======================
-    let sessionCode = null;
-
     function startSpeakerFlow(sessionFromUrl) {
       // Koodisyötön käsittelijät (liitetään kerran)
       const doJoin = () => {
@@ -530,7 +533,6 @@
     });
 
     // ---- Firebase-yhteys puhujalle ----
-    let linesRef = null, interimRef = null, presRef = null;
     function connectFirebase() {
       linesRef = ref(db, 'sessions/' + sessionCode + '/lines');
       interimRef = ref(db, 'sessions/' + sessionCode + '/interim');
