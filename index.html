@@ -389,7 +389,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v3';
+    const APP_VERSION = 'v4';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -717,6 +717,12 @@
         if (interimRef) set(interimRef, pendingInterim).catch(() => {});
       }, 150);
     }
+    // Peruu odottavan välitekstin, ettei vanha osuma kirjoitu lopullisen lauseen jälkeen
+    // (muuten himmeä "raakateksti" jää näkyviin lukijalle).
+    function cancelPendingInterim() {
+      if (interimTimer) { clearTimeout(interimTimer); interimTimer = null; }
+      pendingInterim = null;
+    }
 
     // ====================== PUHUJA: paikallinen näyttö ======================
     function appendSpeakerFinal(text, key, sp) {
@@ -827,6 +833,8 @@
               set(r, { t: e.result.text, ts: serverTimestamp(), sp }).catch(() => {});
             }
             appendSpeakerFinal(e.result.text, key, sp);
+            // Tyhjennä väliteksti ja peru odottava throttle-kirjoitus (race-korjaus)
+            cancelPendingInterim();
             if (interimRef) set(interimRef, '').catch(() => {});
           }
         };
@@ -859,6 +867,10 @@
 
     function stopRecognition() {
       if (!recognizer) return;
+      // Siivoa väliteksti, ettei viimeinen alustava osuma jää näkyviin lukijalle
+      cancelPendingInterim();
+      el('speakerInterim').textContent = '';
+      if (interimRef) set(interimRef, '').catch(() => {});
       recognizer.stopTranscribingAsync(
         () => {
           recognizer.close(); recognizer = null; listening = false;
