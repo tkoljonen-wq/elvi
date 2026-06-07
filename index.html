@@ -388,12 +388,15 @@
 
     el('appHeader').classList.remove('hidden');
 
+    // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
+    const APP_VERSION = 'v2';
+
     if (role === 'reader') {
-      el('headerTitle').textContent = 'Elvi · lukija';
+      el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
       el('roleBtn').classList.remove('hidden');
       startReader();
     } else if (role === 'speaker') {
-      el('headerTitle').textContent = 'Elvi · puhuja';
+      el('headerTitle').textContent = 'Elvi · puhuja · ' + APP_VERSION;
       el('roleBtn').classList.remove('hidden');
       startSpeakerFlow(urlSession);
     } else {
