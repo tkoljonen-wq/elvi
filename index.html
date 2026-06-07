@@ -131,6 +131,22 @@
     .reader-col-body { font-size: clamp(1.1rem, 3.2vw, 1.9rem); line-height: 1.35; }
     .reader-col-body p { margin: 0 0 0.4rem 0; }
 
+    /* --- Puhujapalkki: mykistys per puhuja (lukija) --- */
+    .speaker-bar { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem; }
+    .speaker-bar:empty { display: none; }
+    .spk-chip {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.4rem 0.7rem; border-radius: 999px; border: 1px solid #475569;
+      background: var(--panel); color: var(--text); cursor: pointer;
+      font-size: 0.95rem; font-weight: 600;
+    }
+    .spk-chip .dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; flex: 0 0 auto; }
+    .spk-chip .mute-ico { font-size: 1rem; }
+    .spk-chip.muted { opacity: 0.55; }
+    .spk-chip.muted .chip-name { text-decoration: line-through; }
+    /* Mykistetyn puhujan rivit/palsta piiloon */
+    .muted-hidden { display: none !important; }
+
     /* --- Puhujan nimi lauseen päällä (yksipalstainen, lukija + puhuja) --- */
     .spk-name { display: block; font-weight: 700; line-height: 1.2; }
     #readerFinal .line { border-left: 4px solid var(--muted); padding: 0.1rem 0 0.1rem 0.7rem; margin-bottom: 0.7rem; }
@@ -270,6 +286,7 @@
       <button id="vmSingle">Yksipalstainen</button>
       <button id="vmMulti">Monipalstainen</button>
     </div>
+    <div id="speakerBar" class="speaker-bar"></div>
     <div id="readerFinal"></div>
     <div id="readerMulti" class="reader-multi hidden"></div>
     <p id="readerInterim"></p>
@@ -399,7 +416,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v5';
+    const APP_VERSION = 'v6';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -490,6 +507,13 @@
       try { savedNames = JSON.parse(localStorage.getItem(NAMES_KEY) || '{}'); } catch (e) {}
       const persistNames = () => localStorage.setItem(NAMES_KEY, JSON.stringify(savedNames));
 
+      // --- Mykistys: piilotetut puhujat (säilyy istuntokoodin mukaan) ---
+      const speakerBar = el('speakerBar');
+      const MUTED_KEY = 'elvi_muted_' + code;
+      let muted = new Set();
+      try { muted = new Set(JSON.parse(localStorage.getItem(MUTED_KEY) || '[]')); } catch (e) {}
+      const persistMuted = () => localStorage.setItem(MUTED_KEY, JSON.stringify([...muted]));
+
       const speakers = new Map();   // speakerId → { bodyEl, … }
       let speakerN = 0;
       const speakerKey = (sp) => (sp && sp !== 'Unknown') ? sp : '?';
@@ -531,8 +555,21 @@
         col.appendChild(head); col.appendChild(body);
         multiEl.appendChild(col);
 
-        const obj = { bodyEl: body, idx: speakerN, color };
+        // Mykistyspainike (chip) puhujapalkkiin
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'spk-chip';
+        const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = color;
+        const cname = document.createElement('span'); cname.className = 'chip-name';
+        cname.textContent = savedNames[k] || ('Puhuja ' + speakerN);
+        const ico = document.createElement('span'); ico.className = 'mute-ico';
+        chip.append(dot, cname, ico);
+        chip.addEventListener('click', () => toggleMute(k));
+        speakerBar.appendChild(chip);
+
+        const obj = { bodyEl: body, colEl: col, chipEl: chip, muteIco: ico, idx: speakerN, color };
         speakers.set(k, obj);
+        applyMute(k);   // aseta alkutila (jos jo mykistetty muistissa)
         return obj;
       }
 
@@ -541,12 +578,34 @@
         const s = speakers.get(k);
         return savedNames[k] || ('Puhuja ' + (s ? s.idx : '?'));
       }
-      // Kun puhuja nimetään, päivitä yksipalstaisen näkymän nimileimat
+      // Kun puhuja nimetään, päivitä yksipalstaisen näkymän nimileimat + chip
       function refreshSingleNames(k) {
         const name = speakerDisplayName(k);
         finalEl.querySelectorAll('.spk-name').forEach((eln) => {
           if (eln.dataset.sp === k) eln.textContent = name;
         });
+        const s = speakers.get(k);
+        if (s && s.chipEl) s.chipEl.querySelector('.chip-name').textContent = name;
+      }
+
+      // Mykistä / poista mykistys: piilottaa puhujan rivit ja palstan molemmista näkymistä
+      function applyMute(k) {
+        const on = muted.has(k);
+        finalEl.querySelectorAll('.line').forEach((l) => {
+          if (l.dataset.sp === k) l.classList.toggle('muted-hidden', on);
+        });
+        const s = speakers.get(k);
+        if (s) {
+          if (s.colEl) s.colEl.classList.toggle('muted-hidden', on);
+          if (s.chipEl) s.chipEl.classList.toggle('muted', on);
+          if (s.muteIco) s.muteIco.textContent = on ? '🔇' : '🔊';
+        }
+      }
+      function toggleMute(k) {
+        if (muted.has(k)) muted.delete(k); else muted.add(k);
+        persistMuted();
+        applyMute(k);
+        scrollDown();
       }
 
       // Sama lause näkyy molemmissa näkymissä → pidetään kummankin elementit muistissa
@@ -566,6 +625,8 @@
         // Yksipalstainen: nimileima + teksti
         const wrap = document.createElement('div');
         wrap.className = 'line';
+        wrap.dataset.sp = k;
+        if (muted.has(k)) wrap.classList.add('muted-hidden');
         wrap.style.borderLeftColor = spk.color;
         const nameEl = document.createElement('div');
         nameEl.className = 'spk-name';
@@ -596,11 +657,12 @@
         if (!lineData.size) phEl.classList.remove('hidden');
       }
       function clearAll() {
-        finalEl.innerHTML = ''; multiEl.innerHTML = '';
+        finalEl.innerHTML = ''; multiEl.innerHTML = ''; speakerBar.innerHTML = '';
         singleEls.clear(); multiEls.clear(); lineData.clear();
         speakers.clear(); speakerN = 0;
         interimEl.textContent = '';
         phEl.classList.remove('hidden');
+        // mykistysvalinnat (muted) säilyvät tarkoituksella istunnon yli
       }
 
       // Valmiit lauseet saapuvat lapsiniminä → lisätään järjestyksessä
