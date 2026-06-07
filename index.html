@@ -67,6 +67,14 @@
     }
     .choose .remember input { width: 1.4rem; height: 1.4rem; accent-color: var(--accent); flex: 0 0 auto; }
 
+    /* --- Lukija: kiinteä yläosa (napit + mykistys) + vierittyvä tekstialue --- */
+    #readerView { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+    #readerTop { flex: 0 0 auto; padding: 1.25rem 1.25rem 0.5rem; }
+    #readerScroll {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto;
+      padding: 0 1.25rem 1.25rem; -webkit-overflow-scrolling: touch;
+    }
+
     /* --- Lukijanäkymä --- */
     .reader-info {
       background: var(--panel); border: 1px solid #334155; border-radius: 0.75rem;
@@ -267,6 +275,7 @@
 
   <!-- ============ LUKIJANÄKYMÄ ============ -->
   <main id="readerView" class="hidden">
+    <div id="readerTop">
     <div class="reader-info collapsed" id="readerInfo">
       <div class="reader-info-head">
         <span class="codeline">Istunnon koodi: <b id="sessionCode">····</b></span>
@@ -287,10 +296,13 @@
       <button id="vmMulti">Monipalstainen</button>
     </div>
     <div id="speakerBar" class="speaker-bar"></div>
+    </div><!-- /readerTop (kiinteä, ei vierity) -->
+    <div id="readerScroll">
     <div id="readerFinal"></div>
     <div id="readerMulti" class="reader-multi hidden"></div>
     <p id="readerInterim"></p>
     <p id="readerPlaceholder" class="placeholder">Odottaa puhujan tekstiä…</p>
+    </div><!-- /readerScroll (vierittyvä tekstialue) -->
   </main>
 
   <!-- ============ PUHUJA: KOODISYÖTTÖ ============ -->
@@ -416,7 +428,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v6';
+    const APP_VERSION = 'v7';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -615,7 +627,7 @@
       const linesPath = 'sessions/' + code + '/lines';
 
       // Funktiomäärittely (hoistataan) — applyViewMode() kutsuu tätä jo ennen tätä riviä
-      function scrollDown() { el('readerView').scrollTop = el('readerView').scrollHeight; }
+      function scrollDown() { const s = el('readerScroll'); s.scrollTop = s.scrollHeight; }
 
       function addLine(key, text, sp) {
         phEl.classList.add('hidden');
