@@ -2,7 +2,7 @@
 // Hae aina ensin verkosta (sovellus päivittyy automaattisesti);
 // käytä välimuistia vain jos verkko ei vastaa (offline).
 
-const CACHE = 'elvi-v7';
+const CACHE = 'elvi-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -28,8 +28,17 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  // Oman sovelluskoodin (sama alkuperä) haetaan ohittaen selaimen HTTP-välimuisti,
+  // jotta uusi versio näkyy heti — muuten GitHub Pagesin ~10 min välimuisti voi
+  // palauttaa vanhan index.html:n vaikka service worker hakee "verkko ensin".
+  let req = e.request;
+  try {
+    if (new URL(e.request.url).origin === self.location.origin) {
+      req = new Request(e.request, { cache: 'no-store' });
+    }
+  } catch (err) { /* käytä alkuperäistä pyyntöä */ }
   e.respondWith(
-    fetch(e.request)
+    fetch(req)
       .then((resp) => {
         // Tallenna tuore vastaus välimuistiin offline-varalle
         const copy = resp.clone();

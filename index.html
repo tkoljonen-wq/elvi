@@ -428,7 +428,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v7';
+    const APP_VERSION = 'v8';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -1036,8 +1036,24 @@
   <!-- Service workerin rekisteröinti (suhteellinen polku) -->
   <script>
     if ('serviceWorker' in navigator) {
+      // Jos uusi service worker ottaa ohjauksen (= uusi versio), lataa sivu kerran
+      // automaattisesti, jotta puhelin saa uuden version ilman manuaalista temppua.
+      let swReloaded = false;
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (swReloaded) return;
+          swReloaded = true;
+          location.reload();
+        });
+      }
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW-rekisteröinti epäonnistui', e));
+        navigator.serviceWorker.register('sw.js').then((reg) => {
+          // Tarkista heti päivitys, ja uudelleen aina kun sivu palaa näkyviin
+          reg.update();
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') reg.update();
+          });
+        }).catch((e) => console.warn('SW-rekisteröinti epäonnistui', e));
       });
     }
   </script>
