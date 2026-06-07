@@ -531,7 +531,8 @@
       const multiEls = new Map();    // key → <p> (monipalsta)
       const linesPath = 'sessions/' + code + '/lines';
 
-      const scrollDown = () => { el('readerView').scrollTop = el('readerView').scrollHeight; };
+      // Funktiomäärittely (hoistataan) — applyViewMode() kutsuu tätä jo ennen tätä riviä
+      function scrollDown() { el('readerView').scrollTop = el('readerView').scrollHeight; }
 
       function addLine(key, text, sp) {
         phEl.classList.add('hidden');
