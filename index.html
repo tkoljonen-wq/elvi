@@ -106,6 +106,31 @@
     }
     .placeholder { color: var(--muted); font-style: italic; font-size: 1.1rem; }
 
+    /* --- Lukija: näkymän valinta (yksi-/monipalstainen) --- */
+    .view-toggle { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .view-toggle button {
+      flex: 1; padding: 0.6rem 0.4rem; font-size: 0.95rem; font-weight: 600;
+      border: 1px solid #475569; border-radius: 0.5rem; background: var(--panel);
+      color: var(--muted); cursor: pointer;
+    }
+    .view-toggle button.active { background: var(--accent-dark); color: #fff; border-color: var(--accent-dark); }
+
+    /* --- Lukija: monipalstainen näkymä --- */
+    .reader-multi { display: flex; gap: 0.6rem; align-items: flex-start; overflow-x: auto; }
+    .reader-col {
+      flex: 1 1 0; min-width: 8.5rem; background: var(--panel);
+      border: 1px solid #334155; border-top: 4px solid var(--muted);
+      border-radius: 0.6rem; padding: 0.5rem;
+    }
+    .reader-col-head { margin-bottom: 0.5rem; }
+    .name-select {
+      width: 100%; font-size: 1rem; font-weight: 700; padding: 0.4rem;
+      border-radius: 0.5rem; border: 1px solid #475569; background: #0b1220;
+      color: var(--text); cursor: pointer; -webkit-appearance: menulist;
+    }
+    .reader-col-body { font-size: clamp(1.1rem, 3.2vw, 1.9rem); line-height: 1.35; }
+    .reader-col-body p { margin: 0 0 0.4rem 0; }
+
     /* --- Puhujan: koodisyöttö --- */
     .join {
       flex: 1; min-height: 0; overflow-y: auto;
@@ -231,7 +256,12 @@
         </div>
       </div>
     </div>
+    <div class="view-toggle">
+      <button id="vmSingle">Yksipalstainen</button>
+      <button id="vmMulti">Monipalstainen</button>
+    </div>
     <div id="readerFinal"></div>
+    <div id="readerMulti" class="reader-multi hidden"></div>
     <p id="readerInterim"></p>
     <p id="readerPlaceholder" class="placeholder">Odottaa puhujan tekstiä…</p>
   </main>
@@ -419,59 +449,149 @@
       setStatus('● odottaa puhujaa', 'live');
 
       const finalEl = el('readerFinal');
+      const multiEl = el('readerMulti');
       const interimEl = el('readerInterim');
       const phEl = el('readerPlaceholder');
 
-      // Avain → kappale-elementti, jotta puhujan korjaukset/poistot osuvat oikeaan lauseeseen
-      const lineEls = new Map();
+      // --- Näkymätila: yksi- vai monipalstainen (säilyy laitteen muistissa) ---
+      const VIEWMODE_KEY = 'elvi_reader_viewmode';
+      let viewMode = localStorage.getItem(VIEWMODE_KEY) === 'multi' ? 'multi' : 'single';
+      function applyViewMode() {
+        const multi = viewMode === 'multi';
+        finalEl.classList.toggle('hidden', multi);
+        multiEl.classList.toggle('hidden', !multi);
+        el('vmSingle').classList.toggle('active', !multi);
+        el('vmMulti').classList.toggle('active', multi);
+        scrollDown();
+      }
+      el('vmSingle').addEventListener('click', () => { viewMode = 'single'; localStorage.setItem(VIEWMODE_KEY, 'single'); applyViewMode(); });
+      el('vmMulti').addEventListener('click', () => { viewMode = 'multi'; localStorage.setItem(VIEWMODE_KEY, 'multi'); applyViewMode(); });
+      applyViewMode();
+
+      // --- Puhujat monipalstaisessa näkymässä ---
+      const COLORS = ['#38bdf8', '#f472b6', '#4ade80', '#fbbf24', '#a78bfa', '#fb923c'];
+      const NAME_OPTIONS = ['Timppa', 'Pia', 'Elvi', 'Jasmin', 'Miska'];
+      // Annetut nimet säilyvät istuntokoodin mukaan, jotta ne eivät katoa päivityksessä
+      const NAMES_KEY = 'elvi_names_' + code;
+      let savedNames = {};
+      try { savedNames = JSON.parse(localStorage.getItem(NAMES_KEY) || '{}'); } catch (e) {}
+      const persistNames = () => localStorage.setItem(NAMES_KEY, JSON.stringify(savedNames));
+
+      const speakers = new Map();   // speakerId → { bodyEl, … }
+      let speakerN = 0;
+      const speakerKey = (sp) => (sp && sp !== 'Unknown') ? sp : '?';
+
+      // Luo (tai hae) puhujan oma palsta nimivalikoineen
+      function getSpeaker(sp) {
+        const k = speakerKey(sp);
+        if (speakers.has(k)) return speakers.get(k);
+        speakerN++;
+        const color = COLORS[(speakerN - 1) % COLORS.length];
+
+        const col = document.createElement('div');
+        col.className = 'reader-col';
+        col.style.borderTopColor = color;
+
+        const head = document.createElement('div');
+        head.className = 'reader-col-head';
+        const sel = document.createElement('select');
+        sel.className = 'name-select';
+        sel.style.color = color;
+        const optAuto = document.createElement('option');
+        optAuto.value = ''; optAuto.textContent = 'Puhuja ' + speakerN;
+        sel.appendChild(optAuto);
+        NAME_OPTIONS.forEach((n) => {
+          const o = document.createElement('option');
+          o.value = n; o.textContent = n; sel.appendChild(o);
+        });
+        if (savedNames[k]) sel.value = savedNames[k];
+        sel.addEventListener('change', () => {
+          if (sel.value) savedNames[k] = sel.value; else delete savedNames[k];
+          persistNames();
+        });
+        head.appendChild(sel);
+
+        const body = document.createElement('div');
+        body.className = 'reader-col-body';
+
+        col.appendChild(head); col.appendChild(body);
+        multiEl.appendChild(col);
+
+        const obj = { bodyEl: body };
+        speakers.set(k, obj);
+        return obj;
+      }
+
+      // Sama lause näkyy molemmissa näkymissä → pidetään kummankin elementit muistissa
+      const lineData = new Map();    // key → { sp }
+      const singleEls = new Map();   // key → <p> (yksipalsta)
+      const multiEls = new Map();    // key → <p> (monipalsta)
       const linesPath = 'sessions/' + code + '/lines';
+
+      const scrollDown = () => { el('readerView').scrollTop = el('readerView').scrollHeight; };
+
+      function addLine(key, text, sp) {
+        phEl.classList.add('hidden');
+        lineData.set(key, { sp });
+        const p = document.createElement('p');
+        p.textContent = text;
+        finalEl.appendChild(p);
+        singleEls.set(key, p);
+        const p2 = document.createElement('p');
+        p2.textContent = text;
+        getSpeaker(sp).bodyEl.appendChild(p2);
+        multiEls.set(key, p2);
+        interimEl.textContent = '';
+        scrollDown();
+      }
+      function updateLine(key, text) {
+        const p = singleEls.get(key); if (p) p.textContent = text;
+        const p2 = multiEls.get(key); if (p2) p2.textContent = text;
+      }
+      function removeLine(key) {
+        lineData.delete(key);
+        const p = singleEls.get(key); if (p) { p.remove(); singleEls.delete(key); }
+        const p2 = multiEls.get(key); if (p2) { p2.remove(); multiEls.delete(key); }
+        if (!lineData.size) phEl.classList.remove('hidden');
+      }
+      function clearAll() {
+        finalEl.innerHTML = ''; multiEl.innerHTML = '';
+        singleEls.clear(); multiEls.clear(); lineData.clear();
+        speakers.clear(); speakerN = 0;
+        interimEl.textContent = '';
+        phEl.classList.remove('hidden');
+      }
 
       // Valmiit lauseet saapuvat lapsiniminä → lisätään järjestyksessä
       onChildAdded(ref(db, linesPath), (snap) => {
         const v = snap.val();
-        const text = v && v.t ? v.t : '';
-        phEl.classList.add('hidden');
-        const p = document.createElement('p');
-        p.textContent = text;
-        finalEl.appendChild(p);
-        lineEls.set(snap.key, p);
-        interimEl.textContent = '';
-        el('readerView').scrollTop = el('readerView').scrollHeight;
+        addLine(snap.key, (v && v.t) ? v.t : '', (v && v.sp) ? v.sp : '?');
       }, (err) => {
         setStatus('virhe', 'error');
         phEl.textContent = 'Tietokantavirhe: ' + err.message;
         phEl.classList.remove('hidden');
       });
 
-      // Puhuja korjasi lausetta → päivitä sama kappale
+      // Puhuja korjasi lausetta → päivitä molemmat näkymät
       onChildChanged(ref(db, linesPath), (snap) => {
-        const p = lineEls.get(snap.key);
-        if (p) { const v = snap.val(); p.textContent = (v && v.t) ? v.t : ''; }
+        const v = snap.val();
+        updateLine(snap.key, (v && v.t) ? v.t : '');
       });
 
-      // Puhuja poisti yksittäisen lauseen → poista kappale
-      onChildRemoved(ref(db, linesPath), (snap) => {
-        const p = lineEls.get(snap.key);
-        if (p) { p.remove(); lineEls.delete(snap.key); }
-        if (!lineEls.size) phEl.classList.remove('hidden');
-      });
+      // Puhuja poisti yksittäisen lauseen
+      onChildRemoved(ref(db, linesPath), (snap) => removeLine(snap.key));
 
       // Himmeä väliteksti
       onValue(ref(db, 'sessions/' + code + '/interim'), (snap) => {
         const t = snap.val() || '';
         interimEl.textContent = t;
         if (t.trim()) phEl.classList.add('hidden');
-        el('readerView').scrollTop = el('readerView').scrollHeight;
+        scrollDown();
       });
 
       // Tyhjennys: jos puhuja tyhjentää, lines katoaa → näytetään se
       onValue(ref(db, linesPath), (snap) => {
-        if (!snap.exists()) {
-          finalEl.innerHTML = '';
-          lineEls.clear();
-          interimEl.textContent = '';
-          phEl.classList.remove('hidden');
-        }
+        if (!snap.exists()) clearAll();
       });
 
       // Puhujan läsnäolo
@@ -595,12 +715,13 @@
     }
 
     // ====================== PUHUJA: paikallinen näyttö ======================
-    function appendSpeakerFinal(text, key) {
+    function appendSpeakerFinal(text, key, sp) {
       if (!text.trim()) return;
       el('speakerPlaceholder').classList.add('hidden');
       const p = document.createElement('p');
       p.textContent = text.trim();
       if (key) p.dataset.key = key;   // sidos Firebaseen → mahdollistaa korjauksen/poiston
+      if (sp) p.dataset.sp = sp;      // puhujatunniste säilyy korjauksen yli
       el('speakerFinal').appendChild(p);
       el('speakerInterim').textContent = '';
       el('speakerView').scrollTop = el('speakerView').scrollHeight;
@@ -637,7 +758,7 @@
         const t = ta.value.trim();
         if (!t) { ta.focus(); return; }
         restore(t);
-        if (sessionCode && key) set(lineRef(), { t, ts: serverTimestamp() }).catch(() => {});
+        if (sessionCode && key) set(lineRef(), { t, ts: serverTimestamp(), sp: p.dataset.sp || null }).catch(() => {});
       });
       del.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -683,22 +804,25 @@
         const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(s.key, s.region);
         speechConfig.speechRecognitionLanguage = 'fi-FI';
         const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-        recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+        // ConversationTranscriber tuottaa puhujatunnisteen (diarization), jotta
+        // lukija voi näyttää eri puhujat omilla palstoillaan.
+        recognizer = new SpeechSDK.ConversationTranscriber(speechConfig, audioConfig);
 
-        recognizer.recognizing = (sender, e) => {
+        recognizer.transcribing = (sender, e) => {
           setSpeakerInterim(e.result.text);
           sendInterim(e.result.text);
         };
-        recognizer.recognized = (sender, e) => {
+        recognizer.transcribed = (sender, e) => {
           if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text) {
+            const sp = e.result.speakerId || null;
             // Välitä lukijalle: luo avain ensin, jotta lause on jälkikäteen muokattavissa
             let key = null;
             if (linesRef) {
               const r = push(linesRef);
               key = r.key;
-              set(r, { t: e.result.text, ts: serverTimestamp() }).catch(() => {});
+              set(r, { t: e.result.text, ts: serverTimestamp(), sp }).catch(() => {});
             }
-            appendSpeakerFinal(e.result.text, key);
+            appendSpeakerFinal(e.result.text, key, sp);
             if (interimRef) set(interimRef, '').catch(() => {});
           }
         };
@@ -716,7 +840,7 @@
 
         clearSpeakerError();
         setStatus('käynnistetään…');
-        recognizer.startContinuousRecognitionAsync(
+        recognizer.startTranscribingAsync(
           () => {
             listening = true; el('startBtn').disabled = true; el('stopBtn').disabled = false;
             setStatus('● kuuntelee', 'listening');
@@ -731,7 +855,7 @@
 
     function stopRecognition() {
       if (!recognizer) return;
-      recognizer.stopContinuousRecognitionAsync(
+      recognizer.stopTranscribingAsync(
         () => {
           recognizer.close(); recognizer = null; listening = false;
           el('startBtn').disabled = false; el('stopBtn').disabled = true;

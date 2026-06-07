@@ -16,6 +16,7 @@
             ".validate": "newData.hasChildren(['t'])",
             "t":  { ".validate": "newData.isString() && newData.val().length <= 2000" },
             "ts": { ".validate": "newData.isNumber()" },
+            "sp": { ".validate": "newData.isString() && newData.val().length <= 50" },
             "$muu": { ".validate": false }
           }
         },
