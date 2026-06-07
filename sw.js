@@ -2,7 +2,7 @@
 // Hae aina ensin verkosta (sovellus päivittyy automaattisesti);
 // käytä välimuistia vain jos verkko ei vastaa (offline).
 
-const CACHE = 'elvi-v2';
+const CACHE = 'elvi-v3';
 const ASSETS = [
   './',
   './index.html',
