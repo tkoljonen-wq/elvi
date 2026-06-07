@@ -131,6 +131,16 @@
     .reader-col-body { font-size: clamp(1.1rem, 3.2vw, 1.9rem); line-height: 1.35; }
     .reader-col-body p { margin: 0 0 0.4rem 0; }
 
+    /* --- Puhujan nimi lauseen päällä (yksipalstainen, lukija + puhuja) --- */
+    .spk-name { display: block; font-weight: 700; line-height: 1.2; }
+    #readerFinal .line { border-left: 4px solid var(--muted); padding: 0.1rem 0 0.1rem 0.7rem; margin-bottom: 0.7rem; }
+    #readerFinal .line p { margin: 0; }
+    #readerFinal .spk-name { font-size: 0.5em; margin-bottom: 0.1rem; }
+    #speakerFinal .line { border-left: 4px solid var(--muted); padding: 0.1rem 0 0.1rem 0.6rem; margin-bottom: 0.6rem; }
+    #speakerFinal .line p { margin: 0; cursor: pointer; }
+    #speakerFinal .line p.editing { cursor: default; }
+    #speakerFinal .spk-name { font-size: 0.6em; margin-bottom: 0.05rem; }
+
     /* --- Puhujan: koodisyöttö --- */
     .join {
       flex: 1; min-height: 0; overflow-y: auto;
@@ -389,7 +399,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v4';
+    const APP_VERSION = 'v5';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -511,6 +521,7 @@
         sel.addEventListener('change', () => {
           if (sel.value) savedNames[k] = sel.value; else delete savedNames[k];
           persistNames();
+          refreshSingleNames(k);   // päivitä myös yksipalstaisen näkymän nimet
         });
         head.appendChild(sel);
 
@@ -520,9 +531,22 @@
         col.appendChild(head); col.appendChild(body);
         multiEl.appendChild(col);
 
-        const obj = { bodyEl: body };
+        const obj = { bodyEl: body, idx: speakerN, color };
         speakers.set(k, obj);
         return obj;
+      }
+
+      // Puhujan näyttönimi: valittu nimi (Timppa…) tai oletus "Puhuja N"
+      function speakerDisplayName(k) {
+        const s = speakers.get(k);
+        return savedNames[k] || ('Puhuja ' + (s ? s.idx : '?'));
+      }
+      // Kun puhuja nimetään, päivitä yksipalstaisen näkymän nimileimat
+      function refreshSingleNames(k) {
+        const name = speakerDisplayName(k);
+        finalEl.querySelectorAll('.spk-name').forEach((eln) => {
+          if (eln.dataset.sp === k) eln.textContent = name;
+        });
       }
 
       // Sama lause näkyy molemmissa näkymissä → pidetään kummankin elementit muistissa
@@ -536,14 +560,27 @@
 
       function addLine(key, text, sp) {
         phEl.classList.add('hidden');
+        const k = speakerKey(sp);
         lineData.set(key, { sp });
+        const spk = getSpeaker(sp);   // varmistaa palstan + antaa värin/numeron
+        // Yksipalstainen: nimileima + teksti
+        const wrap = document.createElement('div');
+        wrap.className = 'line';
+        wrap.style.borderLeftColor = spk.color;
+        const nameEl = document.createElement('div');
+        nameEl.className = 'spk-name';
+        nameEl.dataset.sp = k;
+        nameEl.style.color = spk.color;
+        nameEl.textContent = speakerDisplayName(k);
         const p = document.createElement('p');
         p.textContent = text;
-        finalEl.appendChild(p);
+        wrap.appendChild(nameEl); wrap.appendChild(p);
+        finalEl.appendChild(wrap);
         singleEls.set(key, p);
+        // Monipalstainen: teksti omaan sarakkeeseen
         const p2 = document.createElement('p');
         p2.textContent = text;
-        getSpeaker(sp).bodyEl.appendChild(p2);
+        spk.bodyEl.appendChild(p2);
         multiEls.set(key, p2);
         interimEl.textContent = '';
         scrollDown();
@@ -554,7 +591,7 @@
       }
       function removeLine(key) {
         lineData.delete(key);
-        const p = singleEls.get(key); if (p) { p.remove(); singleEls.delete(key); }
+        const p = singleEls.get(key); if (p) { (p.closest('.line') || p).remove(); singleEls.delete(key); }
         const p2 = multiEls.get(key); if (p2) { p2.remove(); multiEls.delete(key); }
         if (!lineData.size) phEl.classList.remove('hidden');
       }
@@ -725,14 +762,35 @@
     }
 
     // ====================== PUHUJA: paikallinen näyttö ======================
+    // Puhujakohtainen väri ja "Puhuja N" -leima (sama numerointijärjestys kuin lukijalla)
+    const SPK_COLORS = ['#38bdf8', '#f472b6', '#4ade80', '#fbbf24', '#a78bfa', '#fb923c'];
+    let spkMap = {}, spkN = 0;
+    function speakerVisual(sp) {
+      const k = (sp && sp !== 'Unknown') ? sp : '?';
+      if (!spkMap[k]) {
+        spkN++;
+        spkMap[k] = { label: 'Puhuja ' + spkN, color: SPK_COLORS[(spkN - 1) % SPK_COLORS.length] };
+      }
+      return spkMap[k];
+    }
+
     function appendSpeakerFinal(text, key, sp) {
       if (!text.trim()) return;
       el('speakerPlaceholder').classList.add('hidden');
+      const v = speakerVisual(sp);
+      const wrap = document.createElement('div');
+      wrap.className = 'line';
+      wrap.style.borderLeftColor = v.color;
+      const nameEl = document.createElement('div');
+      nameEl.className = 'spk-name';
+      nameEl.style.color = v.color;
+      nameEl.textContent = v.label;
       const p = document.createElement('p');
       p.textContent = text.trim();
       if (key) p.dataset.key = key;   // sidos Firebaseen → mahdollistaa korjauksen/poiston
       if (sp) p.dataset.sp = sp;      // puhujatunniste säilyy korjauksen yli
-      el('speakerFinal').appendChild(p);
+      wrap.appendChild(nameEl); wrap.appendChild(p);
+      el('speakerFinal').appendChild(wrap);
       el('speakerInterim').textContent = '';
       el('speakerView').scrollTop = el('speakerView').scrollHeight;
     }
@@ -773,7 +831,7 @@
       del.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!confirm('Poistetaanko tämä lause?')) return;
-        p.remove();
+        (p.closest('.line') || p).remove();
         if (sessionCode && key) set(lineRef(), null).catch(() => {});
         if (!el('speakerFinal').children.length) el('speakerPlaceholder').classList.remove('hidden');
       });
@@ -885,6 +943,7 @@
       el('speakerFinal').innerHTML = '';
       el('speakerInterim').textContent = '';
       el('speakerPlaceholder').classList.remove('hidden');
+      spkMap = {}; spkN = 0;   // nollaa puhujien numerointi
       if (linesRef) set(linesRef, null).catch(() => {});
       if (interimRef) set(interimRef, '').catch(() => {});
     }
