@@ -414,7 +414,9 @@
 
     const params = new URLSearchParams(location.search);
     let role = params.get('role');
-    const urlSession = (params.get('session') || '').toUpperCase();
+    // Siivotaan samoin kuin käsin syötetty koodi — Firebasen kieltämät merkit
+    // (esim. piste) polussa kaataisivat muuten koko skriptin.
+    const urlSession = (params.get('session') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
     // Jos URL:ssa ei roolia, käytä tälle laitteelle tallennettua valintaa
     if (!role) role = getSavedRole();
@@ -428,7 +430,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v8';
+    const APP_VERSION = 'v9';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -495,6 +497,15 @@
       const interimEl = el('readerInterim');
       const phEl = el('readerPlaceholder');
 
+      // Automaattivieritys: pohjalle vain jos lukija on jo (lähes) pohjalla,
+      // jotta näkymä ei hypi kun vanhaa tekstiä on vieritetty ylös luettavaksi.
+      // (Määriteltävä ennen applyViewMode()-kutsua — scrollDown() käyttää tätä.)
+      let autoScroll = true;
+      el('readerScroll').addEventListener('scroll', () => {
+        const s = el('readerScroll');
+        autoScroll = s.scrollHeight - s.scrollTop - s.clientHeight < 60;
+      });
+
       // --- Näkymätila: yksi- vai monipalstainen (säilyy laitteen muistissa) ---
       const VIEWMODE_KEY = 'elvi_reader_viewmode';
       let viewMode = localStorage.getItem(VIEWMODE_KEY) === 'multi' ? 'multi' : 'single';
@@ -504,7 +515,7 @@
         multiEl.classList.toggle('hidden', !multi);
         el('vmSingle').classList.toggle('active', !multi);
         el('vmMulti').classList.toggle('active', multi);
-        scrollDown();
+        scrollDown(true);
       }
       el('vmSingle').addEventListener('click', () => { viewMode = 'single'; localStorage.setItem(VIEWMODE_KEY, 'single'); applyViewMode(); });
       el('vmMulti').addEventListener('click', () => { viewMode = 'multi'; localStorage.setItem(VIEWMODE_KEY, 'multi'); applyViewMode(); });
@@ -617,7 +628,7 @@
         if (muted.has(k)) muted.delete(k); else muted.add(k);
         persistMuted();
         applyMute(k);
-        scrollDown();
+        scrollDown(true);
       }
 
       // Sama lause näkyy molemmissa näkymissä → pidetään kummankin elementit muistissa
@@ -626,8 +637,14 @@
       const multiEls = new Map();    // key → <p> (monipalsta)
       const linesPath = 'sessions/' + code + '/lines';
 
-      // Funktiomäärittely (hoistataan) — applyViewMode() kutsuu tätä jo ennen tätä riviä
-      function scrollDown() { const s = el('readerScroll'); s.scrollTop = s.scrollHeight; }
+      // Funktiomäärittely (hoistataan) — applyViewMode() kutsuu tätä jo ennen tätä riviä.
+      // force=true vierittää aina (näkymän vaihto, mykistys); muuten vain jos
+      // lukija oli valmiiksi pohjalla (autoScroll).
+      function scrollDown(force) {
+        if (!force && !autoScroll) return;
+        const s = el('readerScroll');
+        s.scrollTop = s.scrollHeight;
+      }
 
       function addLine(key, text, sp) {
         phEl.classList.add('hidden');
@@ -701,6 +718,7 @@
         const t = snap.val() || '';
         interimEl.textContent = t;
         if (t.trim()) phEl.classList.add('hidden');
+        else if (!lineData.size) phEl.classList.remove('hidden');
         scrollDown();
       });
 
@@ -974,6 +992,9 @@
           if (e.reason === SpeechSDK.CancellationReason.Error) {
             setStatus('virhe', 'error');
             showSpeakerError('Azure katkaisi yhteyden (koodi ' + e.errorCode + ')', e.errorDetails || 'ei lisätietoa');
+            // Vapauta mikrofoni ja olio, jotta uusi "Aloita" lähtee puhtaalta pöydältä
+            try { recognizer.close(); } catch (err) {}
+            recognizer = null;
           }
           listening = false; el('startBtn').disabled = false; el('stopBtn').disabled = true;
         };
