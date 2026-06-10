@@ -23,6 +23,7 @@
 
         "interim":      { ".validate": "newData.isString() && newData.val().length <= 2000" },
         "speakerOnline": { ".validate": "newData.isBoolean()" },
+        "recStarted":    { ".validate": "newData.isNumber()" },
 
         "$muu": { ".validate": false }
       }

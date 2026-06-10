@@ -413,7 +413,7 @@
     // Puhujan tila — määriteltävä ennen reititystä, koska reititys kutsuu
     // startSpeakerFlow()/connectFirebase() heti ja ne käyttävät näitä (TDZ).
     let sessionCode = null;
-    let linesRef = null, interimRef = null, presRef = null;
+    let linesRef = null, interimRef = null, presRef = null, recStartRef = null;
 
     const params = new URLSearchParams(location.search);
     let role = params.get('role');
@@ -433,7 +433,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v10';
+    const APP_VERSION = 'v11';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
@@ -730,6 +730,31 @@
         if (!snap.exists()) clearAll();
       });
 
+      // Uusi tunnistusistunto alkoi (puhuja painoi Aloita): Azure numeroi
+      // puhujat alusta, joten vanhat nimivalinnat ja mykistykset eivät enää
+      // osu oikeisiin henkilöihin → nollataan ne.
+      function resetSpeakerLabels() {
+        savedNames = {};
+        persistNames();
+        [...muted].forEach((k) => { muted.delete(k); applyMute(k); });
+        persistMuted();
+        speakers.forEach((s, k) => {
+          const sel = s.colEl.querySelector('.name-select');
+          if (sel) sel.value = '';
+          refreshSingleNames(k);
+        });
+      }
+      let lastRecStart;   // undefined = ensimmäistä arvoa ei vielä luettu
+      onValue(ref(db, 'sessions/' + code + '/recStarted'), (snap) => {
+        const v = snap.val();
+        // Ensimmäinen luku sivun avautuessa: vain muistiin, ei nollata —
+        // nimet säilyvät jos lukijan sivu päivittyy kesken keskustelun.
+        if (lastRecStart === undefined) { lastRecStart = v; return; }
+        if (v === null || v === lastRecStart) return;
+        lastRecStart = v;
+        resetSpeakerLabels();
+      });
+
       // Puhujan läsnäolo
       onValue(ref(db, 'sessions/' + code + '/speakerOnline'), (snap) => {
         const online = !!snap.val();
@@ -834,6 +859,7 @@
       linesRef = ref(db, 'sessions/' + sessionCode + '/lines');
       interimRef = ref(db, 'sessions/' + sessionCode + '/interim');
       presRef = ref(db, 'sessions/' + sessionCode + '/speakerOnline');
+      recStartRef = ref(db, 'sessions/' + sessionCode + '/recStarted');
       set(presRef, true).catch(() => {});
       onDisconnect(presRef).set(false);
       setStatus('● yhdistetty (' + sessionCode + ')', 'live');
@@ -1012,6 +1038,9 @@
           () => {
             listening = true; el('startBtn').disabled = true; el('stopBtn').disabled = false;
             setStatus('● kuuntelee', 'listening');
+            // Uusi tunnistusistunto: Azure numeroi puhujat alusta (Guest-1…),
+            // joten kerro lukijalle että nimivalinnat eivät enää päde.
+            if (recStartRef) set(recStartRef, serverTimestamp()).catch(() => {});
           },
           (err) => { setStatus('Käynnistys epäonnistui', 'error'); showSpeakerError('Käynnistys epäonnistui', err); }
         );
