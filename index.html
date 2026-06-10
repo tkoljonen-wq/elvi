@@ -2,7 +2,9 @@
 <html lang="fi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- viewport-fit=cover: Android piirtää PWA:n eleenavigointipalkin alle (edge-to-edge);
+       ilman tätä safe-area-inset-* on 0 ja alapalkin napit jäävät osin navigointipalkin taakse. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0f172a">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.svg">
@@ -33,6 +35,7 @@
     header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 0.75rem 1rem; background: var(--panel); border-bottom: 1px solid #334155;
+      padding-top: calc(0.75rem + env(safe-area-inset-top));
     }
     header h1 { font-size: 1rem; margin: 0; font-weight: 600; }
     .status {
@@ -430,7 +433,7 @@
     el('appHeader').classList.remove('hidden');
 
     // Versiomerkki: näkyy otsikossa, jotta voi varmistaa että uusin versio latautui.
-    const APP_VERSION = 'v9';
+    const APP_VERSION = 'v10';
 
     if (role === 'reader') {
       el('headerTitle').textContent = 'Elvi · lukija · ' + APP_VERSION;
