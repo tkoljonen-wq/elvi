@@ -2,7 +2,10 @@
 // Hae aina ensin verkosta (sovellus päivittyy automaattisesti);
 // käytä välimuistia vain jos verkko ei vastaa (offline).
 
-const CACHE = 'elvi-v11';
+// Origin tkoljonen-wq.github.io on jaettu muiden sovellusten kanssa:
+// poistetaan vain tämän sovelluksen omat vanhat välimuistit
+const CACHE_PREFIX = 'elvi-';
+const CACHE = CACHE_PREFIX + 'v12';
 const ASSETS = [
   './',
   './index.html',
@@ -21,7 +24,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
